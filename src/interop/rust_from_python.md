@@ -68,14 +68,8 @@ fn cached_answer() -> i32 {
 }
 ```
 
-## Valid Arguments
-
-Every return value must be convertible to PyResult. This is defined as IntoPyResult trait. So any return value of them must implement IntoPyResult. It will be PyResult<PyObjectRef>, PyObjectRef and any PyResult<T> when T implements IntoPyObject. Practically we can list them like:
-
-
-The `vm` paramter is just suffix. We add it as the last parameter unless we don't use `vm` at all - very rare case. It takes an object `obj` as `PyObjectRef`, which is a general python object. It returns `PyResult<String>`, which will turn into `PyResult<PyObjectRef>` the same representation of `PyResult`.
-
-Every return value must be convertible to `PyResult`. This is defined as `IntoPyResult` trait. So any return value of them must implement `IntoPyResult`. It will be `PyResult<PyObjectRef>`, `PyObjectRef` and any `PyResult<T>` when T implements `IntoPyObject`. Practically we can list them like:
+## Valid Arguments/Return Types
+Every input and return value must be convertible to `PyResult`. This is defined as `IntoPyResult` trait. So any return value of them must implement `IntoPyResult`. It will be `PyResult<PyObjectRef>`, `PyObjectRef` and any `PyResult<T>` when T implements `IntoPyObject`. Practically we can list them like:
 - Any `T` when `PyResult<T>` is possible
 - `PyObjectRef`
 - `PyResult<()>` and `()` as `None`
@@ -85,7 +79,63 @@ Every return value must be convertible to `PyResult`. This is defined as `IntoPy
 - `String` for `PyStr`
 - And more types implementing `IntoPyObject`.
 
-The same could mostly be said about input arguments.
+The `vm` paramter is optional. We add it as the last parameter unless we don't use `vm` at all - very rare case. It takes an object `obj` as `PyObjectRef`, which is a general python object. It returns `PyResult<String>`, which will turn into `PyResult<PyObjectRef>` the same representation of `PyResult`. The `vm` parameter does not need to be passed in by the python code.
+
+If needed a seperate struct can be used for arguments using the `FromArgs` trait like so:
+
+```rust
+#[derive(FromArgs)]
+struct BisectArgs {
+    a: PyObjectRef,
+    x: PyObjectRef
+    #[pyarg(any, optional)]
+    lo: OptionalArg<ArgIndex>,
+    #[pyarg(any, optional)]
+    hi: OptionalArg<ArgIndex>,
+    #[pyarg(named, default)]
+    key: Option<PyObjectRef>,
+}
+
+#[pyfunction]
+fn bisect_left(
+    BisectArgs { a, x, lo, hi, key }: BisectArgs,
+    vm: &VirtualMachine,
+) -> PyResult<usize> {
+    // ...
+}
+
+// or ...
+
+#[pyfunction]
+fn bisect_left(
+    args: BisectArgs,
+    vm: &VirtualMachine,
+) -> PyResult<usize> {
+    // ...
+}
+```
+
+## Errors
+
+Returning a PyResult is the supported error handling strategy. Builtin python errors are created with `vm.new_xxx_error` methods.
+
+### Custom Errors
+
+```
+#[pyattr(once)]
+fn error(vm: &VirtualMachine) -> PyTypeRef {
+    vm.ctx.new_exception_type(
+        "<module_name>",
+        "<error_name>",
+        Some(vec![vm.ctx.exceptions.exception_type.to_owned()]),
+    )
+}
+
+// convenience function
+fn new_error(message: &str, vm: &VirtualMachine) -> PyBaseExceptionRef {
+    vm.new_exception_msg(vm.class("<module_name>", "<error_name>"), message.to_owned())
+}
+```
 
 ## Functions
 Functions are defined using the `#[pyfunction]` attribute.
